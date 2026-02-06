@@ -10,6 +10,10 @@ st.set_page_config(page_title="佛法小故事電台", page_icon="🙏", layout=
 @st.cache_data(show_spinner=False) # 加入快取，避免每次重整都重新下載
 def download_audio_content(url):
     try:
+        # 檢查 URL 是否為空
+        if pd.isna(url) or str(url).strip() == "":
+            return None
+
         url = str(url).strip()
         file_id = ""
         # 1. 解析 ID
@@ -17,19 +21,20 @@ def download_audio_content(url):
             file_id = url.split("id=")[1].split("&")[0]
         elif "/file/d/" in url:
             file_id = url.split("/file/d/")[1].split("/")[0]
-        
+
         if not file_id:
             return None
 
         # 2. 構建下載連結
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        
+
         # 3. Python 後端下載 (繞過瀏覽器限制)
-        response = requests.get(download_url)
+        response = requests.get(download_url, timeout=10)
         if response.status_code == 200:
             return response.content
         return None
-    except:
+    except Exception as e:
+        st.warning(f"下載音檔時發生錯誤：{str(e)}")
         return None
 
 # --- 資料處理 ---
@@ -97,15 +102,21 @@ if df is not None:
     # 2. 隨機播放
     st.divider()
     if st.button("🔀 隨機聽一段"):
-        random_story = df.sample(n=1).iloc[0]
-        st.success(f"📖 推薦題目：**{random_story[col_title]}**")
-        
-        with st.spinner('正在載入音檔...'):
-            audio_bytes_rand = download_audio_content(random_story[col_file])
-            if audio_bytes_rand:
-                st.audio(audio_bytes_rand, format='audio/mp4')
-            else:
-                st.error("音檔讀取失敗。")
+        # 過濾掉標題為空的記錄
+        valid_stories = df[df[col_title].notna() & (df[col_title] != "")]
+
+        if not valid_stories.empty:
+            random_story = valid_stories.sample(n=1).iloc[0]
+            st.success(f"📖 推薦題目：**{random_story[col_title]}**")
+
+            with st.spinner('正在載入音檔...'):
+                audio_bytes_rand = download_audio_content(random_story[col_file])
+                if audio_bytes_rand:
+                    st.audio(audio_bytes_rand, format='audio/mp4')
+                else:
+                    st.error(f"音檔讀取失敗。連結：{random_story[col_file]}")
+        else:
+            st.warning("沒有可用的故事。")
 
     # 3. 歷史回顧
     st.divider()
