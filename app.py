@@ -122,15 +122,44 @@ if df is not None:
     st.divider()
     st.subheader("📜 歷史回顧")
     all_dates = sorted(df['display_date'].dropna().unique(), reverse=True)
-    
+
+    # 初始化 session state 來追蹤哪些音檔被展開
+    if 'playing_audio' not in st.session_state:
+        st.session_state.playing_audio = set()
+
     if all_dates:
-        sel_date = st.selectbox("選擇日期", all_dates)
-        hist_stories = df[df['display_date'] == sel_date]
-        for _, row in hist_stories.iterrows():
-            st.write(f"🔹 **{row[col_title]}**")
-            # 歷史區塊我們只用連結顯示，避免一次下載太多卡住
-            # 如果需要也可以改成 download_audio_content
-            st.audio(download_audio_content(row[col_file]), format='audio/mp4')
+        for date_val in all_dates:
+            st.markdown(f"### 📅 {date_val}")
+            hist_stories = df[df['display_date'] == date_val]
+
+            for idx, row in hist_stories.iterrows():
+                # 使用唯一的 key 來識別每個故事
+                story_key = f"{date_val}_{idx}"
+
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"🔹 **{row[col_title]}**")
+                with col2:
+                    # 切換按鈕
+                    if story_key in st.session_state.playing_audio:
+                        if st.button("隱藏", key=f"hide_{story_key}"):
+                            st.session_state.playing_audio.remove(story_key)
+                            st.rerun()
+                    else:
+                        if st.button("播放", key=f"play_{story_key}"):
+                            st.session_state.playing_audio.add(story_key)
+                            st.rerun()
+
+                # 只有在 session state 中的故事才載入音檔
+                if story_key in st.session_state.playing_audio:
+                    with st.spinner('正在載入音檔...'):
+                        audio_bytes = download_audio_content(row[col_file])
+                        if audio_bytes:
+                            st.audio(audio_bytes, format='audio/mp4')
+                        else:
+                            st.error(f"音檔讀取失敗。連結：{row[col_file]}")
+
+                st.divider()
 
 else:
     st.error("無法讀取資料表。")
